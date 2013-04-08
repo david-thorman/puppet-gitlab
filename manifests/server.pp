@@ -63,6 +63,7 @@ class gitlab::server {
       provider    => 'shell',
       cwd         => "${git_home}/gitlab",
       user        => $git_user,
+      timeout     => 0,
       require     => [
         Exec['Get gitlab'],
         Package['bundler']
@@ -76,6 +77,7 @@ class gitlab::server {
       cwd         => "${git_home}/gitlab",
       user        => $git_user,
       creates     => "${git_home}/.gitlab_setup_done",
+      subscribe   => Exec['Install gitlab'],
       require     => [
         Exec['Install gitlab'],
         File["${git_home}/gitlab/config/database.yml"],

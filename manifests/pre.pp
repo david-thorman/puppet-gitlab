@@ -86,20 +86,25 @@ class gitlab::redhat_packages {
 #
 class gitlab::debian_packages {
   include gitlab
-  include mysql
 
   $gitlab_dbtype  = $gitlab::gitlab_dbtype
   $git_home       = $gitlab::git_home
   $git_user       = $gitlab::git_user
   $git_admin_pubkey = $gitlab::git_admin_pubkey
 
-  exec {
-    'apt-get update':
-      before      => Class['mysql'],
-      command     => '/usr/bin/apt-get update';
+  if (Exec['apt-get update'] == undef) {
+    exec {
+      'apt-get update':
+       command     => '/usr/bin/apt-get update';
+    }
+  } 
+
+  if ( $gitlab_dbtype == 'mysql' ) {
+    include mysql
+    class { 'mysql::server': require => Exec['apt-get update'], }
   }
 
-  class { 'mysql::server': require => Exec['apt-get update'], }
+
 
   $db_packages = $gitlab_dbtype ? {
     mysql => ['libmysql++-dev','libmysqlclient-dev'],
@@ -162,7 +167,29 @@ class gitlab::debian_packages {
           logoutput   => 'on_failure',
           refreshonly => true;
       }
-    } # Squeeze, Precise
+    } # Squeeze
+    'precise': {
+      # Need to install 1.9.3 and set it as the default ruby for the rest of
+      # this to work. Note that 1.9.1 and 1.9.3 are the same package in precise.
+      package {
+        ['ruby1.9.1','ruby1.9.1-dev','rubygems1.9.1','rake', 
+          'libaugeas-ruby1.9.1','libopenssl-ruby1.9.1', 'libssl-dev', 
+          'zlib1g-dev']:
+          ensure  => installed,
+          require => Exec['apt-get update'];
+      } ->
+      exec { 'gitlab-precise: Make ruby 1.9.3 default' :
+         command =>  'update-alternatives --install /usr/bin/ruby ruby /usr/bin/ruby1.9.1 400 \
+           --slave   /usr/share/man/man1/ruby.1.gz ruby.1.gz \
+                          /usr/share/man/man1/ruby1.9.1.1.gz \
+          --slave   /usr/bin/ri ri /usr/bin/ri1.9.1 \
+          --slave   /usr/bin/irb irb /usr/bin/irb1.9.1 \
+          --slave   /usr/bin/rdoc rdoc /usr/bin/rdoc1.9.1 \
+	  && update-alternatives --set gem /usr/bin/gem1.9.1',
+         logoutput   => 'on_failure',
+         user        => 'root',
+      } 
+    } # precise
     default: {
       # Assuming default ruby 1.9.3 (wheezy,quantal,precise)
       package {
